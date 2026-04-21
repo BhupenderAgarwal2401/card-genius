@@ -9,7 +9,9 @@ export function AppProvider({ children }) {
   const [offers, setOffers] = useState([]);
   const [apiKeys, setApiKeys] = useState({});
   const [gmailAccounts, setGmailAccounts] = useState([]);
-  const [settings, setSettings] = useState({ pin: null, sessionOnly: false, daysBack: 7, autoPurge: false });
+  const [settings, setSettings] = useState({
+    pin: null, sessionOnly: false, daysBack: 7, autoPurge: false, theme: 'dark',
+  });
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [toast, setToast] = useState(null);
   const [activeModel, setActiveModel] = useState(null);
@@ -39,6 +41,20 @@ export function AppProvider({ children }) {
     if (!savedSettings.pin) setIsUnlocked(true);
     setDataLoaded(true);
   }, []);
+
+  // Theme on <html> + PWA chrome (after settings load or when user changes)
+  useEffect(() => {
+    const theme = settings.theme === 'light' ? 'light' : 'dark';
+    const root = document.documentElement;
+    if (theme === 'light') root.setAttribute('data-theme', 'light');
+    else root.removeAttribute('data-theme');
+
+    const themeColor = theme === 'light' ? '#f1f5f9' : '#0f172a';
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor);
+    document
+      .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+      ?.setAttribute('content', theme === 'light' ? 'default' : 'black-translucent');
+  }, [settings.theme]);
 
   // Auto-purge expired offers ONLY after data is loaded and autoPurge is on
   useEffect(() => {

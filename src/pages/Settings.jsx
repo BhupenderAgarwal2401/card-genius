@@ -3,7 +3,7 @@ import { useApp } from '../hooks/useApp';
 import { exportBackup, importBackup } from '../utils/storage';
 import {
   Key, Download, Upload, Trash2,
-  ChevronDown, ChevronUp, Eye, EyeOff, RefreshCw
+  ChevronDown, ChevronUp, Eye, EyeOff, RefreshCw, Sun, Moon
 } from 'lucide-react';
 
 function Section({ title, icon, children, defaultOpen = false }) {
@@ -289,6 +289,27 @@ export default function Settings() {
 
       {/* Preferences */}
       <Section title="Preferences" icon={<RefreshCw size={16} color="var(--purple)" />}>
+        <div className="form-group">
+          <label className="label">Appearance</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={`btn btn-sm flex-1 justify-center ${(settings.theme || 'dark') === 'dark' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => saveSettings({ theme: 'dark' })}
+            >
+              <Moon size={15} /> Dark
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm flex-1 justify-center ${(settings.theme || 'dark') === 'light' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => saveSettings({ theme: 'light' })}
+            >
+              <Sun size={15} /> Light
+            </button>
+          </div>
+          <div className="text-xs text-dim mt-1">Saved on this device only</div>
+        </div>
+
         <div className="form-group">
           <label className="label">Email sync look-back period</label>
           <select

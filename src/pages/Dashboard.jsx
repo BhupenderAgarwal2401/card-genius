@@ -32,7 +32,7 @@ export default function Dashboard() {
           <div className="page-title">CardGenius</div>
           <div className="page-subtitle">Your smart credit card companion</div>
         </div>
-        <div className="icon-circle" style={{ background: 'rgba(0,212,255,0.1)' }}>
+        <div className="icon-circle icon-circle-accent">
           <CreditCard size={20} color="var(--accent)" />
         </div>
       </div>
