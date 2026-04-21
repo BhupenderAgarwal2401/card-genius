@@ -5,10 +5,7 @@
 
 [build]
   publish = "dist"
-  command = "npm run build"
-
-[build.environment]
-  NPM_FLAGS = "--include=dev"
+  command = "npm ci && npm run build"
 
 [[headers]]
   for = "/*"
