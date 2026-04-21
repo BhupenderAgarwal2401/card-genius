@@ -5,7 +5,11 @@
 
 [build]
   publish = "dist"
-  command = "npm ci && npm run build"
+  command = "npm install --legacy-peer-deps && npm run build"
+
+[build.environment]
+  NODE_VERSION = "18.19.0"
+  NPM_FLAGS = "--legacy-peer-deps"
 
 [[headers]]
   for = "/*"
