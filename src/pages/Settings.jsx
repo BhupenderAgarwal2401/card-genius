@@ -113,8 +113,9 @@ export default function Settings() {
   }
 
   const modelStatus = [
-    { name: 'Gemini 1.5 Pro', key: localKeys.google, note: 'Paid subscription' },
-    { name: 'Gemini 1.5 Flash', key: localKeys.google, note: 'Free tier (same key)' },
+    { name: 'Gemini 2.5 Pro', key: localKeys.google, note: 'Best quality (Google AI Pro / paid tier)' },
+    { name: 'Gemini 2.5 Flash', key: localKeys.google, note: 'Fast; same Gemini API key' },
+    { name: 'Gemini 2.0 Flash', key: localKeys.google, note: 'Extra Google fallback' },
     { name: 'GPT-4o Mini', key: localKeys.openai, note: 'Very cheap fallback' },
     { name: 'Claude Haiku', key: localKeys.anthropic, note: 'Cheapest fallback' },
   ];
@@ -164,7 +165,7 @@ export default function Settings() {
           value={localKeys.google}
           onChange={handleKeyChange}
           placeholder="AIza..."
-          helpText="Get free key at aistudio.google.com → Get API Key. Works for both Pro and Flash."
+          helpText="Get a key at aistudio.google.com → Get API Key. Used for Gemini 2.5 / 2.0 (same key for Pro-tier then Flash fallbacks)."
         />
         <ApiKeyField
           label="OpenAI API Key"
@@ -180,7 +181,7 @@ export default function Settings() {
           value={localKeys.anthropic}
           onChange={handleKeyChange}
           placeholder="sk-ant-..."
-          helpText="console.anthropic.com → API Keys. Claude Haiku 3 used (cheapest model)."
+          helpText="console.anthropic.com → API Keys. Claude Haiku used as fallback."
         />
 
         <button

@@ -1,20 +1,88 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../hooks/useApp';
 import { REWARD_TYPES, CATEGORIES } from '../data/cards';
-import { Plus, Search, Trash2, X, Tag, Info, Download } from 'lucide-react';
+import { Plus, Search, Trash2, X, Tag, Download } from 'lucide-react';
 import { exportOffersCSV } from '../utils/storage';
 
+function OfferDetailSheet({ offer, onClose }) {
+  if (!offer) return null;
+  const typeInfo = REWARD_TYPES[offer.discountType] || REWARD_TYPES.cashback;
+  const row = (label, value) =>
+    value != null && String(value).trim() !== '' ? (
+      <div className="offer-detail-row">
+        <div className="offer-detail-label">{label}</div>
+        <div className="offer-detail-value">{String(value)}</div>
+      </div>
+    ) : null;
+
+  return (
+    <div
+      className="modal-overlay offer-detail-overlay"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="modal offer-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="offer-detail-title">
+        <div className="modal-handle" />
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <div id="offer-detail-title" className="offer-detail-sheet-title">
+              {offer.merchant || 'Offer'}
+            </div>
+            <div className="offer-detail-sheet-sub mt-1">
+              <span className="badge" style={{ background: typeInfo.color + '22', color: typeInfo.color }}>
+                {typeInfo.label}
+              </span>
+              {offer.category && (
+                <span className="badge badge-gray" style={{ marginLeft: 6 }}>
+                  {offer.category}
+                </span>
+              )}
+            </div>
+          </div>
+          <button type="button" className="btn btn-ghost btn-icon offer-detail-close" onClick={onClose} aria-label="Close">
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="offer-detail-discount-big">{offer.discount}</div>
+        <p className="offer-detail-cardline">{offer.cardName}</p>
+
+        <div className="offer-detail-body">
+          {row('Description', offer.description)}
+          {row('Promo code', offer.promoCode)}
+          {row('Valid from', offer.validFrom)}
+          {row('Valid until', offer.validUntil)}
+          {offer.minSpend != null && row('Min spend', `₹${offer.minSpend}`)}
+          {offer.maxCashback != null && row('Max cashback / cap', `₹${offer.maxCashback}`)}
+          {offer.confidence != null && row('AI confidence', `${Math.round(Number(offer.confidence) * 100)}%`)}
+          {row('Source', offer.source)}
+          {row('Added', offer.addedAt?.slice(0, 10))}
+          {offer.terms ? (
+            <div className="offer-detail-terms-block">
+              <div className="offer-detail-label">Terms &amp; conditions</div>
+              <div className="offer-detail-terms-scroll">{offer.terms}</div>
+            </div>
+          ) : null}
+        </div>
+
+        <button type="button" className="btn btn-primary btn-full mt-3" onClick={onClose}>
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function OfferCard({ offer, onDelete }) {
-  const [expanded, setExpanded] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const typeInfo = REWARD_TYPES[offer.discountType] || REWARD_TYPES.cashback;
   const isExpiring = offer.validUntil && (new Date(offer.validUntil) - new Date()) / (1000 * 60 * 60 * 24) <= 3;
 
   return (
     <div className="offer-card mb-2" style={{ borderColor: isExpiring ? 'var(--red)33' : undefined }}>
       <div className="offer-card-accent" style={{ background: isExpiring ? 'var(--red)' : typeInfo.color }} />
-      <div style={{ paddingLeft: 12 }}>
-        <div className="flex items-center justify-between">
-          <div className="flex-1 truncate">
+      <div className="offer-card-inner">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="offer-merchant">{offer.merchant || 'General Offer'}</span>
               <span className="badge" style={{ background: typeInfo.color + '22', color: typeInfo.color }}>
@@ -24,42 +92,41 @@ function OfferCard({ offer, onDelete }) {
             </div>
             <div className="offer-card-name mt-1">{offer.cardName}</div>
           </div>
-          <div className="text-right ml-3" style={{ flexShrink: 0 }}>
+          <div className="text-right flex-shrink-0">
             <div className="offer-discount">{offer.discount}</div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-2">
-          <div className="flex gap-2 flex-wrap">
-            {offer.category && <span className="badge badge-gray">{offer.category}</span>}
-            {offer.promoCode && (
-              <span className="badge badge-blue text-mono">{offer.promoCode}</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {offer.validUntil && (
-              <span className="offer-expiry">Till {offer.validUntil}</span>
-            )}
-            <button className="btn btn-ghost btn-icon" style={{ padding: 4 }} onClick={() => setExpanded(!expanded)}>
-              <Info size={13} color="var(--text3)" />
-            </button>
-            <button className="btn btn-ghost btn-icon" style={{ padding: 4 }} onClick={() => onDelete(offer.id)}>
-              <Trash2 size={13} color="var(--red)" />
-            </button>
-          </div>
+        <div className="flex items-center flex-wrap gap-2 mt-2">
+          {offer.category && <span className="badge badge-gray">{offer.category}</span>}
+          {offer.promoCode && <span className="badge badge-blue text-mono">{offer.promoCode}</span>}
+          {offer.validUntil && <span className="offer-expiry">Till {offer.validUntil}</span>}
         </div>
 
-        {expanded && (
-          <div className="mt-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
-            {offer.description && <div style={{ fontSize: 13, color: 'var(--text2)' }}>{offer.description}</div>}
-            {offer.minSpend && <div className="text-sm text-muted mt-1">Min spend: ₹{offer.minSpend}</div>}
-            {offer.maxCashback && <div className="text-sm text-muted mt-1">Max cashback: ₹{offer.maxCashback}</div>}
-            {offer.terms && <div className="text-xs text-dim mt-1">{offer.terms}</div>}
-            {offer.source && <div className="text-xs text-dim mt-1">Source: {offer.source}</div>}
-            {offer.addedAt && <div className="text-xs text-dim mt-1">Added: {offer.addedAt?.slice(0, 10)}</div>}
-          </div>
+        {offer.description && (
+          <p className="offer-card-preview">{offer.description}</p>
         )}
+
+        <div className="offer-card-actions">
+          <button
+            type="button"
+            className="btn btn-secondary offer-card-details-btn"
+            onClick={() => setSheetOpen(true)}
+          >
+            View full offer
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost offer-card-delete-btn"
+            onClick={() => onDelete(offer.id)}
+            aria-label="Delete offer"
+          >
+            <Trash2 size={20} strokeWidth={2} />
+          </button>
+        </div>
       </div>
+
+      {sheetOpen && <OfferDetailSheet offer={offer} onClose={() => setSheetOpen(false)} />}
     </div>
   );
 }
@@ -238,7 +305,17 @@ export default function Offers() {
         </div>
       )}
 
-      {showAdd && <AddOfferModal cards={cards} onClose={() => setShowAdd(false)} onAdd={(offer) => { addOffer(offer); showToast('Offer added!', 'success'); }} />}
+      {showAdd && (
+        <AddOfferModal
+          cards={cards}
+          onClose={() => setShowAdd(false)}
+          onAdd={(offer) => {
+            const created = addOffer(offer);
+            if (created) showToast('Offer added!', 'success');
+            else showToast('This offer already exists in your list', 'info');
+          }}
+        />
+      )}
     </div>
   );
 }

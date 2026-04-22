@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { storage, encryptData, decryptData } from '../utils/storage';
 import { CARDS_DATA } from '../data/cards';
+import { offerDedupeKey, dedupeOffersByKey, stripOfferReviewMeta } from '../utils/offerDedupe';
 
 const AppContext = createContext(null);
 
@@ -31,7 +32,11 @@ export function AppProvider({ children }) {
       storage.set('cards', CARDS_DATA);
     }
 
-    setOffers(savedOffers);
+    const dedupedOffers = dedupeOffersByKey(savedOffers);
+    setOffers(dedupedOffers);
+    if (dedupedOffers.length !== savedOffers.length) {
+      storage.set('offers', dedupedOffers);
+    }
     setSettings(s => ({ ...s, ...savedSettings }));
     setGmailAccounts(savedGmail);
 
@@ -83,31 +88,49 @@ export function AppProvider({ children }) {
   }, []);
 
   const addOffer = useCallback((offer) => {
-    const withId = {
-      ...offer,
-      id: `offer_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      addedAt: new Date().toISOString()
-    };
-    setOffers(prev => {
+    const clean = stripOfferReviewMeta(offer);
+    let created = null;
+    setOffers((prev) => {
+      const k = offerDedupeKey(clean);
+      if (!k || prev.some((o) => offerDedupeKey(o) === k)) {
+        return prev;
+      }
+      const withId = {
+        ...clean,
+        id: `offer_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        addedAt: new Date().toISOString(),
+      };
+      created = withId;
       const updated = [withId, ...prev];
       storage.set('offers', updated);
       return updated;
     });
-    return withId;
+    return created;
   }, []);
 
   const addOffers = useCallback((newOffers) => {
-    const withIds = newOffers.map(o => ({
-      ...o,
-      id: `offer_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      addedAt: new Date().toISOString()
-    }));
-    setOffers(prev => {
+    const base = Date.now();
+    let addedRows = [];
+    setOffers((prev) => {
+      const existing = new Set(prev.map(offerDedupeKey));
+      const cleanList = (newOffers || []).map(stripOfferReviewMeta).filter((o) => {
+        const k = offerDedupeKey(o);
+        if (!k || existing.has(k)) return false;
+        existing.add(k);
+        return true;
+      });
+      const withIds = cleanList.map((o, i) => ({
+        ...o,
+        id: `offer_${base}_${i}_${Math.random().toString(36).slice(2)}`,
+        addedAt: new Date().toISOString(),
+      }));
+      addedRows = withIds;
+      if (withIds.length === 0) return prev;
       const updated = [...withIds, ...prev];
       storage.set('offers', updated);
       return updated;
     });
-    return withIds;
+    return addedRows;
   }, []);
 
   const deleteOffer = useCallback((id) => {

@@ -1,19 +1,29 @@
-// AI Model rotation: Gemini Pro → Gemini Flash → GPT-4o-mini → Claude Haiku
-// Falls back automatically when quota is exceeded
+// AI Model rotation: Gemini 2.5 Pro → 2.5 Flash → 2.0 Flash → GPT-4o-mini → Claude Haiku
+// Falls back automatically when quota is exceeded or a model is unavailable
 
 const MODEL_QUEUE = [
   {
-    id: 'gemini-pro',
-    name: 'Gemini 1.5 Pro',
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
     provider: 'google',
-    endpoint: (key) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${key}`,
-    free: false, // paid subscription
+    endpoint: (key) =>
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${key}`,
+    free: false,
   },
   {
-    id: 'gemini-flash',
-    name: 'Gemini 1.5 Flash',
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
     provider: 'google',
-    endpoint: (key) => `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+    endpoint: (key) =>
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+    free: true,
+  },
+  {
+    id: 'gemini-2.0-flash',
+    name: 'Gemini 2.0 Flash',
+    provider: 'google',
+    endpoint: (key) =>
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
     free: true,
   },
   {
@@ -32,19 +42,65 @@ const MODEL_QUEUE = [
   }
 ];
 
-async function callGemini(endpoint, prompt, imageBase64 = null) {
+async function callGemini(endpoint, prompt, imageBase64 = null, preferJsonMime = true) {
   const parts = [{ text: prompt }];
   if (imageBase64) {
     parts.push({ inline_data: { mime_type: 'image/jpeg', data: imageBase64 } });
   }
-  const res = await fetch(endpoint, {
+  const baseGen = { maxOutputTokens: 4096, temperature: 0.15 };
+  const bodyWithJson = {
+    contents: [{ parts }],
+    generationConfig: { ...baseGen, responseMimeType: 'application/json' },
+  };
+  const bodyPlain = {
+    contents: [{ parts }],
+    generationConfig: baseGen,
+  };
+
+  let res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts }], generationConfig: { maxOutputTokens: 2048 } })
+    body: JSON.stringify(preferJsonMime ? bodyWithJson : bodyPlain),
   });
-  if (res.status === 429 || res.status === 503) throw new Error('QUOTA_EXCEEDED');
-  if (!res.ok) throw new Error(`Gemini error: ${res.status}`);
-  const data = await res.json();
+  if (preferJsonMime && res.status === 400) {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyPlain),
+    });
+  }
+
+  const rawText = await res.text();
+  let data = {};
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    data = {};
+  }
+
+  const errMsg = (data?.error?.message || data?.error?.status || rawText || '').toString().toLowerCase();
+  const errCode = data?.error?.code;
+  const errStatus = (data?.error?.status || '').toString().toUpperCase();
+
+  if (data?.error) {
+    if (
+      errCode === 429 ||
+      errStatus === 'RESOURCE_EXHAUSTED' ||
+      /quota|rate limit|resource_exhausted|too many requests|exhausted\b/.test(errMsg)
+    ) {
+      throw new Error('QUOTA_EXCEEDED');
+    }
+  }
+
+  if (!res.ok) {
+    if (res.status === 429 || res.status === 503 || res.status === 408) throw new Error('QUOTA_EXCEEDED');
+    if (res.status === 403 && /quota|billing|limit|exhausted/.test(errMsg)) throw new Error('QUOTA_EXCEEDED');
+    if (/resource_exhausted|quota exceeded|rate limit|too many requests/.test(errMsg)) {
+      throw new Error('QUOTA_EXCEEDED');
+    }
+    throw new Error(`Gemini error: ${res.status}`);
+  }
+
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
@@ -54,9 +110,16 @@ async function callOpenAI(apiKey, prompt) {
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify({ model: 'gpt-4o-mini', messages: [{ role: 'user', content: prompt }], max_tokens: 2048 })
   });
-  if (res.status === 429) throw new Error('QUOTA_EXCEEDED');
+  const raw = await res.text();
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = {};
+  }
+  const em = (data?.error?.message || raw || '').toString().toLowerCase();
+  if (res.status === 429 || res.status === 503 || /rate limit|quota/.test(em)) throw new Error('QUOTA_EXCEEDED');
   if (!res.ok) throw new Error(`OpenAI error: ${res.status}`);
-  const data = await res.json();
   return data.choices?.[0]?.message?.content || '';
 }
 
@@ -71,14 +134,24 @@ async function callClaude(apiKey, prompt) {
     },
     body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2048, messages: [{ role: 'user', content: prompt }] })
   });
-  if (res.status === 429) throw new Error('QUOTA_EXCEEDED');
+  const raw = await res.text();
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = {};
+  }
+  const em = (data?.error?.message || raw || '').toString().toLowerCase();
+  if (res.status === 429 || res.status === 503 || /rate limit|overloaded|quota/.test(em)) {
+    throw new Error('QUOTA_EXCEEDED');
+  }
   if (!res.ok) throw new Error(`Claude error: ${res.status}`);
-  const data = await res.json();
   return data.content?.[0]?.text || '';
 }
 
-export async function callAI(prompt, apiKeys = {}, imageBase64 = null) {
+export async function callAI(prompt, apiKeys = {}, imageBase64 = null, options = {}) {
   const errors = [];
+  const preferJsonMime = options.preferJsonMime !== false;
 
   for (const model of MODEL_QUEUE) {
     const key = apiKeys[model.provider];
@@ -87,7 +160,10 @@ export async function callAI(prompt, apiKeys = {}, imageBase64 = null) {
     try {
       if (model.provider === 'google') {
         const endpoint = model.endpoint(key);
-        return { text: await callGemini(endpoint, prompt, imageBase64), model: model.name };
+        return {
+          text: await callGemini(endpoint, prompt, imageBase64, preferJsonMime),
+          model: model.name,
+        };
       } else if (model.provider === 'openai') {
         return { text: await callOpenAI(key, prompt), model: model.name };
       } else if (model.provider === 'anthropic') {
@@ -109,19 +185,19 @@ export async function callAI(prompt, apiKeys = {}, imageBase64 = null) {
 export function buildOfferExtractionPrompt(emailContent, cardNames) {
   return `You are a credit card offer extraction assistant. Analyze this email content and extract credit card offers.
 
-CREDIT CARDS THE USER HAS:
+CREDIT CARDS THE USER HAS (match offers to these when the email names a bank or card product; also extract bank-issued card offers even if the card name is abbreviated):
 ${cardNames.join(', ')}
 
 EMAIL CONTENT:
 ${emailContent}
 
-Extract ALL offers mentioned. For each offer return a JSON array with objects having these fields:
+Extract ALL offers that relate to credit/debit cards, bank cashback, reward points, EMI deals from issuers, or spending milestones on payment cards. Include retail co-branded card deals if they clearly name a bank or one of the user's cards. For each offer return a JSON array with objects having these fields:
 - cardId: match to the closest card name from the user's list (or "unknown" if not matching)
 - cardName: the card name as mentioned in email
 - merchant: merchant/brand name
 - category: one of [Online Shopping, Fuel, Dining, Grocery, Travel, Movies & Entertainment, OTT Subscriptions, Food Delivery, Utilities, UPI, International, All Spends]
 - description: short description of offer
-- discount: the discount/cashback/points value (e.g., "10%", "₹500 off", "5X points")
+- discount: the discount/cashback/points value (required string, e.g., "10%", "₹500 off", "5X points", "Flat ₹250 cashback") — use a short label even if details are in description
 - discountType: one of [cashback, discount, points, voucher, freebie]
 - minSpend: minimum spend required (or null)
 - maxCashback: maximum cashback cap (or null)
@@ -131,7 +207,7 @@ Extract ALL offers mentioned. For each offer return a JSON array with objects ha
 - terms: key terms and conditions (brief)
 - confidence: 0-1 confidence score that this is a real offer
 
-Return ONLY a valid JSON array, no markdown, no explanation. If no offers found return [].`;
+Return ONLY a valid JSON array (not wrapped in an object, no markdown code fences, no commentary before or after). If no offers found return [].`;
 }
 
 export function buildBestCardPrompt(category, amount, cardNames) {

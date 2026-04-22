@@ -41,8 +41,8 @@ src/
 
 **AppContext (useApp hook)**: All global state flows through `AppProvider`. Components use `useApp()` to access cards, offers, apiKeys, and CRUD operations.
 
-**AI Model Rotation** (`aiService.js`): Calls cascade through models on quota exhaustion:
-1. Gemini 1.5 Pro → 2. Gemini 1.5 Flash → 3. GPT-4o Mini → 4. Claude Haiku
+**AI Model Rotation** (`aiService.js`): Calls cascade through models on quota exhaustion or errors:
+1. Gemini 2.5 Pro → 2. Gemini 2.5 Flash → 3. Gemini 2.0 Flash → 4. GPT-4o Mini → 5. Claude Haiku
 
 **Storage Keys** (prefixed with `cg_`):
 - `cards` - Array of card objects with benefits
@@ -56,6 +56,15 @@ src/
 2. `buildOfferExtractionPrompt()` creates structured prompt with user's card names
 3. `callAI()` returns JSON array of offers
 4. User reviews and accepts offers → saved via `addOffers()`
+
+**Gmail (EmailSync)** (`gmailService.js` + `EmailSync.jsx` + `indianSenderFilter.js` + `parseAiJson.js`):
+- Standalone PWA uses OAuth **redirect** (`ux_mode: 'redirect'`) because popups often fail; browser tab uses popup. `consumeGmailOAuthRedirectFromUrl()` runs in `main.jsx` before React so `#access_token=...` does not break `HashRouter`.
+- `getGmailRedirectUri()` must be added to Google Cloud OAuth client **Authorized redirect URIs**.
+- Flow: set **days back**, **category**, optional **India bank/shopping** filter → **Load inbox** → **Load more** (pagination via `nextPageToken`) → select rows → **Extract**. `gmailScanLog` shows per-message status.
+- `fetchEmailSummariesPage` returns `{ summaries, nextPageToken }`; `buildGmailListQuery` supports `broad`, `promotions`, `primary`, `updates`, `social`, `forums`, `all`.
+- `parseOfferJsonArrayFromText` tolerates markdown fences and wrapper objects; Gemini uses `responseMimeType: application/json` when supported (fallback on 400).
+- **Email sync session** (`emailSyncSession.js`): inbox/Gmail UI state (draft text, extracted queue, Gmail list, filters, scan log) is restored from `sessionStorage` when returning to the Email route so navigation does not wipe in-progress work (cleared when the browser tab/session ends).
+- **Offer dedupe** (`offerDedupe.js`): `offerDedupeKey` merges same merchant/card/discount/expiry/code; `addOffers` / `addOffer` skip duplicates vs existing saved offers. Email review uses checkboxes + Save selected / Save all.
 
 ### Data Models
 
