@@ -6,6 +6,13 @@ import {
   ChevronDown, ChevronUp, Eye, EyeOff, RefreshCw, Sun, Moon
 } from 'lucide-react';
 
+/** Only the `*.apps.googleusercontent.com` token is the OAuth Web Client ID — never paste the client secret here. */
+function parseGoogleWebClientId(raw) {
+  const s = String(raw ?? '').trim();
+  const m = s.match(/(\d+-[a-z0-9]+\.apps\.googleusercontent\.com)/i);
+  return m ? m[1] : s;
+}
+
 function Section({ title, icon, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -108,8 +115,16 @@ export default function Settings() {
       showToast('Both Client ID and API Key are required', 'error');
       return;
     }
-    saveSettings({ gmailClientId: gmailClientId.trim(), gmailApiKey: gmailApiKey.trim() });
-    showToast('Gmail settings saved!', 'success');
+    const rawClient = gmailClientId.trim();
+    const cleanedClient = parseGoogleWebClientId(rawClient);
+    if (cleanedClient !== rawClient) setGmailClientId(cleanedClient);
+    saveSettings({ gmailClientId: cleanedClient, gmailApiKey: gmailApiKey.trim() });
+    showToast(
+      cleanedClient !== rawClient
+        ? 'Gmail settings saved. Client ID had extra text removed — use only the …apps.googleusercontent.com value; never paste the OAuth client secret here.'
+        : 'Gmail settings saved!',
+      'success'
+    );
   }
 
   const modelStatus = [
@@ -205,12 +220,13 @@ export default function Settings() {
           {[
             'Go to console.cloud.google.com → Create New Project',
             'APIs & Services → Library → search "Gmail API" → Enable',
-            'Credentials → Create Credentials → OAuth 2.0 Client ID → Web Application',
-            'Add your Netlify URL as Authorized JavaScript Origin (e.g. https://your-app.netlify.app)',
-            'Also add http://localhost:5173 for local development',
-            'Copy the Client ID shown',
-            'Create another credential → API Key → restrict it to Gmail API',
-            'Paste both values below and save',
+            'Credentials → Create Credentials → OAuth 2.0 Client ID → type must be Web application (not Desktop / iOS / Android)',
+            'Authorized JavaScript origins: no path or trailing slash — e.g. https://your-app.netlify.app and http://localhost:5173',
+            'Same for preview: http://localhost:4173 (add if you use npm run preview or an installed PWA on that port)',
+            'Authorized redirect URIs: add the page URL your app uses after sign-in — e.g. http://localhost:5173/ and http://localhost:4173/ (trailing slash matches this app)',
+            'Copy the OAuth Client ID (ends in .apps.googleusercontent.com) — do not paste the API key here',
+            'Create another credential → API Key → restrict it to Gmail API; paste that as Gmail API Key below',
+            'Save both values below',
           ].map((step, i) => (
             <div key={i} className="flex gap-2 mb-2">
               <div className="text-mono text-dim" style={{ fontSize: 11, minWidth: 20 }}>{i + 1}.</div>

@@ -106,6 +106,36 @@ export function readGmailJustConnected() {
   return !!v;
 }
 
+/** gapi.client rejects with { result, body, status } — not always instanceof Error. */
+export function formatGmailApiError(err) {
+  if (err == null) return 'Unknown error';
+  if (typeof err === 'string') return err;
+  if (err instanceof Error && err.message) return err.message;
+  const nested =
+    err.result?.error?.message ||
+    (typeof err.result?.error === 'string' ? err.result.error : '') ||
+    err.error?.message;
+  if (typeof nested === 'string' && nested.trim()) return nested.trim();
+  if (typeof err.body === 'string' && err.body.trim()) {
+    try {
+      const j = JSON.parse(err.body);
+      if (typeof j?.error?.message === 'string') return j.error.message;
+    } catch {
+      /* ignore */
+    }
+    return err.body.slice(0, 280);
+  }
+  const statusLine = [err.status, err.statusText].filter(Boolean).join(' ').trim();
+  if (statusLine) return statusLine;
+  try {
+    const s = JSON.stringify(err);
+    if (s && s !== '{}') return s.slice(0, 400);
+  } catch {
+    /* ignore */
+  }
+  return 'Unknown error';
+}
+
 function applyTokenToGapi(access_token) {
   if (window.gapi?.client) {
     window.gapi.client.setToken({ access_token });

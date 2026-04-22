@@ -12,6 +12,7 @@ import {
   readGmailJustConnected,
   clearStoredGmailToken,
   getGmailRedirectUri,
+  formatGmailApiError,
 } from '../utils/gmailService';
 import { parseOfferJsonArrayFromText } from '../utils/parseAiJson';
 import {
@@ -392,7 +393,8 @@ export default function EmailSync() {
         );
       }
     } catch (err) {
-      showToast(`Gmail failed: ${err.message}`, 'error');
+      console.error('Gmail load inbox failed', err);
+      showToast(`Gmail failed: ${formatGmailApiError(err)}`, 'error');
     }
     setLoading(false);
   }
@@ -428,7 +430,8 @@ export default function EmailSync() {
       });
       showToast(`Added ${summaries.length} more (total ${merged.length}).`, 'success');
     } catch (err) {
-      showToast(`Could not load more: ${err.message}`, 'error');
+      console.error('Gmail load more failed', err);
+      showToast(`Could not load more: ${formatGmailApiError(err)}`, 'error');
     }
     setLoading(false);
   }
@@ -526,7 +529,7 @@ export default function EmailSync() {
           updateLog({
             status: 'error',
             offersFound: 0,
-            note: err.message?.slice(0, 220) || 'Error',
+            note: formatGmailApiError(err).slice(0, 220),
           });
         }
       }
